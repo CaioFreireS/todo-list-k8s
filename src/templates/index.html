@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Flask GKE Teste - Ambiente: {{ flask_env }}</title>
+</head>
+<body>
+    <h1>Lista de Tarefas Simples</h1>
+
+    <h2>1. Adicionar Item</h2>
+    <form method="post" action="/">
+        <input type="text" name="item_text" placeholder="O que adicionar?" required>
+        <button type="submit" name="action" value="add">Adicionar</button>
+    </form>
+
+    <hr>
+
+    <h2>2. Itens Adicionados:</h2>
+    <table border="1" style="width: 50%;">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Item</th>
+                <th>Remover</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item[0] }}</td>
+                <td>{{ item[1] }}</td>
+                <td>
+                    <form method="post" action="/">
+                        <input type="hidden" name="item_id" value="{{ item[0] }}">
+                        <button type="submit" name="action" value="remove">Remover</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <hr>
+</body>
+</html>

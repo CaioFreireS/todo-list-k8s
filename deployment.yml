@@ -1,0 +1,110 @@
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-config
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS items (
+        id SERIAL PRIMARY KEY,
+        text VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO items (text) VALUES ('Primeiro item de teste GKE');
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-deployment
+  labels:
+    app: postgres
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "mysecretpassword"
+        - name: POSTGRES_DB
+          value: "postgres"
+        volumeMounts:
+        - mountPath: /docker-entrypoint-initdb.d
+          name: db-init-script
+      volumes:
+      - name: db-init-script
+        configMap:
+          name: postgres-init-config
+          items:
+          - key: init.sql
+            path: init.sql
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-service
+spec:
+  selector:
+    app: postgres
+  ports:
+    - protocol: TCP
+      port: 5432
+      targetPort: 5432
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flask-app-deployment
+  labels:
+    app: flask-app
+spec:
+  selector:
+    matchLabels:
+      app: flask-app
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: flask-app
+    spec:
+      containers:
+      - name: flask-app
+        image: caiofreires/todo-list-teste:latest
+        ports:
+        - containerPort: 5000
+        env_file:
+        - ./config/flask.env
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: flask-app-service
+spec:
+  selector:
+    app: flask-app
+  type: LoadBalancer 
+  ports:
+    - protocol: TCP
+      port: 80 
+      targetPort: 5000
