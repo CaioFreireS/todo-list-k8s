@@ -1,5 +1,3 @@
----
-
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -7,11 +5,35 @@ metadata:
 data:
   init.sql: |
     CREATE TABLE IF NOT EXISTS items (
-        id SERIAL PRIMARY KEY,
-        text VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      id SERIAL PRIMARY KEY,
+      text VARCHAR(255) NOT NULL,
+      created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
     INSERT INTO items (text) VALUES ('Primeiro item de teste GKE');
+
+---
+
+# ConfigMap para configurações gerais do Flask (substitui flask.env para variáveis não sensíveis)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flask-config
+data:
+  FLASK_ENV: "production"
+
+---
+
+# Secret para credenciais do PostgreSQL (substitui db.env para variáveis sensíveis)
+# IMPORTANTE: Você DEVE usar a codificação Base64 da sua senha REAL aqui!
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+type: Opaque
+data:
+  POSTGRES_USER: cG9zdGdyZXM= 
+  POSTGRES_PASSWORD: c3VwZXJfc2VuaGE= # Base64 da sua senha real (Ex: "super_senha")
+  POSTGRES_DB: cG9zdGdyZXM=    
 
 ---
 
@@ -37,12 +59,22 @@ spec:
         ports:
         - containerPort: 5432
         env:
+        # Carrega variáveis do Secret para o POSTGRES
         - name: POSTGRES_USER
-          value: "postgres"
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_USER
         - name: POSTGRES_PASSWORD
-          value: "mysecretpassword"
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_PASSWORD
         - name: POSTGRES_DB
-          value: "postgres"
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_DB
         volumeMounts:
         - mountPath: /docker-entrypoint-initdb.d
           name: db-init-script
@@ -91,8 +123,34 @@ spec:
         image: caiofreires/todo-list-teste:latest
         ports:
         - containerPort: 5000
-        env_file:
-        - ./config/flask.env
+        
+        # Carrega configurações não sensíveis do ConfigMap
+        envFrom:
+        - configMapRef:
+            name: flask-config
+        
+        env:
+        # DB_HOST (endereço de conexão)
+        - name: DB_HOST
+          value: "postgres-service"
+        
+        # Mapeamento explícito das chaves do Secret para o nome esperado pelo Flask (DB_USER, DB_PASS, DB_NAME)
+        # ISSO CORRIGE O ERRO DE AUTENTICAÇÃO
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_USER
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_PASSWORD
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: postgres-credentials
+              key: POSTGRES_DB
 
 ---
 
