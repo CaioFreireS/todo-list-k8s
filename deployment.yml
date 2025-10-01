@@ -13,7 +13,6 @@ data:
 
 ---
 
-# ConfigMap para configurações gerais do Flask (substitui flask.env para variáveis não sensíveis)
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -23,8 +22,6 @@ data:
 
 ---
 
-# Secret para credenciais do PostgreSQL (substitui db.env para variáveis sensíveis)
-# IMPORTANTE: Você DEVE usar a codificação Base64 da sua senha REAL aqui!
 apiVersion: v1
 kind: Secret
 metadata:
@@ -32,7 +29,7 @@ metadata:
 type: Opaque
 data:
   POSTGRES_USER: cG9zdGdyZXM= 
-  POSTGRES_PASSWORD: c3VwZXJfc2VuaGE= # Base64 da sua senha real (Ex: "super_senha")
+  POSTGRES_PASSWORD: bXlzZWNyZXRwYXNzd29yZA==
   POSTGRES_DB: cG9zdGdyZXM=    
 
 ---
@@ -59,7 +56,6 @@ spec:
         ports:
         - containerPort: 5432
         env:
-        # Carrega variáveis do Secret para o POSTGRES
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
@@ -120,22 +116,17 @@ spec:
     spec:
       containers:
       - name: flask-app
-        image: caiofreires/todo-list-teste:latest
+        image: us-central1-docker.pkg.dev/todo-list-teste-473312/docker-repo/flask-todo-app:latest
+        #image: caiofreires/todo-list-teste:latest
         ports:
         - containerPort: 5000
-        
-        # Carrega configurações não sensíveis do ConfigMap
         envFrom:
         - configMapRef:
             name: flask-config
-        
         env:
-        # DB_HOST (endereço de conexão)
         - name: DB_HOST
           value: "postgres-service"
-        
-        # Mapeamento explícito das chaves do Secret para o nome esperado pelo Flask (DB_USER, DB_PASS, DB_NAME)
-        # ISSO CORRIGE O ERRO DE AUTENTICAÇÃO
+          #value: "postgres-service.default.svc.cluster.local"
         - name: DB_USER
           valueFrom:
             secretKeyRef:
