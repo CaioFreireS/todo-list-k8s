@@ -1,3 +1,5 @@
+# deployment.yml
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,31 +11,36 @@ data:
       text VARCHAR(255) NOT NULL,
       created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
-    INSERT INTO items (text) VALUES ('Primeiro item de teste GKE');
-
 ---
-
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: flask-config
 data:
   FLASK_ENV: "production"
-
 ---
-
 apiVersion: v1
 kind: Secret
 metadata:
   name: postgres-credentials
 type: Opaque
 data:
-  POSTGRES_USER: cG9zdGdyZXM= 
+  POSTGRES_USER: cG9zdGdyZXM=
   POSTGRES_PASSWORD: bXlzZWNyZXRwYXNzd29yZA==
-  POSTGRES_DB: cG9zdGdyZXM=    
-
+  POSTGRES_DB: cG9zdGdyZXM=
 ---
-
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: csi-cinder-high-speed
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -50,30 +57,22 @@ spec:
       labels:
         app: postgres
     spec:
+      securityContext:
+        fsGroup: 999
       containers:
       - name: postgres
         image: postgres:15
         ports:
         - containerPort: 5432
-        env:
-        - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: postgres-credentials
-              key: POSTGRES_USER
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: postgres-credentials
-              key: POSTGRES_PASSWORD
-        - name: POSTGRES_DB
-          valueFrom:
-            secretKeyRef:
-              name: postgres-credentials
-              key: POSTGRES_DB
+        envFrom:
+        - secretRef:
+            name: postgres-credentials
         volumeMounts:
         - mountPath: /docker-entrypoint-initdb.d
           name: db-init-script
+        - mountPath: /var/lib/postgresql/data
+          name: postgres-storage
+          subPath: postgres-data # <--- A CORREÇÃO DEFINITIVA ESTÁ AQUI
       volumes:
       - name: db-init-script
         configMap:
@@ -81,9 +80,10 @@ spec:
           items:
           - key: init.sql
             path: init.sql
-
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
@@ -92,12 +92,10 @@ spec:
   selector:
     app: postgres
   ports:
-    - protocol: TCP
-      port: 5432
-      targetPort: 5432
-
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
 ---
-
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -116,8 +114,7 @@ spec:
     spec:
       containers:
       - name: flask-app
-        image: us-central1-docker.pkg.dev/todo-list-teste-473312/docker-repo/flask-todo-app:latest
-        #image: caiofreires/todo-list-teste:latest
+        image: caiofreires/todo-list-teste:latest
         ports:
         - containerPort: 5000
         envFrom:
@@ -126,7 +123,6 @@ spec:
         env:
         - name: DB_HOST
           value: "postgres-service"
-          #value: "postgres-service.default.svc.cluster.local"
         - name: DB_USER
           valueFrom:
             secretKeyRef:
@@ -142,9 +138,7 @@ spec:
             secretKeyRef:
               name: postgres-credentials
               key: POSTGRES_DB
-
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
@@ -152,8 +146,8 @@ metadata:
 spec:
   selector:
     app: flask-app
-  type: LoadBalancer 
+  type: LoadBalancer
   ports:
-    - protocol: TCP
-      port: 80 
-      targetPort: 5000
+  - protocol: TCP
+    port: 80
+    targetPort: 5000
